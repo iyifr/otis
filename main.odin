@@ -8,35 +8,40 @@ import "core:strings"
 PORT :: 6379
 
 main :: proc() {
-	listen_socket, listen_err := net.listen_tcp(
-		net.Endpoint{address = net.IP4_Loopback, port = PORT},
-	)
+	endpoint := net.Endpoint {
+		address = net.IP4_Loopback,
+		port    = PORT,
+	}
 
+	listen_socket, listen_err := net.listen_tcp(endpoint)
 	if listen_err != nil {
 		fmt.printf("Listen error: %s\n", listen_err)
+		return
 	}
 
-	client_socket, _, client_accept_error := net.accept_tcp(listen_socket)
+	fmt.printf("Server listening on port: %d\n", endpoint.address)
+
+	client_socket, client_addr, client_accept_error := net.accept_tcp(listen_socket)
 
 	if client_accept_error != nil {
-		fmt.printf("Accept error: %s", client_accept_error)
+		fmt.printf("Accept error: %s\n", client_accept_error)
 	}
 
-	fmt.printfln("Server live on port: %v", PORT)
+	fmt.printf("New client connected from: %v\n", client_addr)
 	handleClient(client_socket)
+
 }
 
 handleClient :: proc(client_socket: net.TCP_Socket) {
-	// This loops till our client wants to disconnect
+	defer net.close(client_socket)
+
 	for {
-		// allocating memory for our data
 		data_in_bytes := make([]byte, 1024)
 		defer delete(data_in_bytes)
 
 		bytes_received, err := net.recv_tcp(client_socket, data_in_bytes[:])
-
 		if err != nil {
-			fmt.printf("error while receiving data: %s", err)
+			fmt.printf("Error while receiving data: %s\n", err)
 			break
 		}
 
@@ -45,26 +50,23 @@ handleClient :: proc(client_socket: net.TCP_Socket) {
 			break
 		}
 
-		// Check for exit command
-		exit_code := "exit\r\n"
-		received_str := strings.clone_from_bytes(data_in_bytes[:bytes_received], context.allocator)
+		received_str := string(data_in_bytes[:bytes_received])
 
-		if strings.has_prefix(received_str, exit_code) {
+		if strings.has_prefix(received_str, "exit") {
 			fmt.println("Connection ended")
 			break
 		}
 
-		// Clone only the received bytes, not the entire buffer
-		if data, err := strings.clone_from_bytes(
-			data_in_bytes[:bytes_received],
-			context.allocator,
-		); err == nil {
-			net.send_tcp(client_socket, transmute([]u8)data)
-			fmt.println("client said:", data)
-			defer delete(data)
-		} else {
-			fmt.eprintln("Error converting bytes to string:", err)
+		str := "PONG"
+
+		// Echo back to client
+		_, send_err := net.send_tcp(client_socket, transmute([]byte)str)
+
+		if send_err != nil {
+			fmt.printf("Error sending response: %s\n", send_err)
+			break
 		}
 
+		fmt.printf("Client said: %s", received_str)
 	}
 }
