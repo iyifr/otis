@@ -3,6 +3,7 @@ package otis
 import "core:bytes"
 import "core:fmt"
 import "core:net"
+import "core:os"
 import "core:strings"
 
 PORT :: 6379
@@ -17,19 +18,21 @@ main :: proc() {
 	listen_socket, listen_err := net.listen_tcp(endpoint)
 
 	if listen_err != nil {
-		fmt.printf("Listen error: %s\n", listen_err)
+		fmt.printf("Error occured binding to an address: %s\n", listen_err)
+		if (listen_err == net.Bind_Error.Address_In_Use) {
+			os.exit(1)
+		}
 	}
 
 	fmt.printf("Server listening on port: %d\n", endpoint.address)
 
 
 	for {
-
 		client_socket, client_addr, client_accept_error := net.accept_tcp(listen_socket)
 
 		if client_accept_error != nil {
 			fmt.printf("Accept error: %s\n", client_accept_error)
-			continue
+			break
 		}
 
 		fmt.printf("New client connected from: %v\n", client_addr)
